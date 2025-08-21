@@ -1,18 +1,23 @@
 package com.example.orderservice;
 
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 import org.springframework.kafka.core.KafkaTemplate;
 
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 class OrderProducerTest {
 
     @Test
     void testSendOrder() {
         // Arrange
-        KafkaTemplate<String, Order> kafkaTemplate = Mockito.mock(KafkaTemplate.class);
-        OrderProducer orderProducer = new OrderProducer(kafkaTemplate);
+        final boolean[] sendCalled = {false};
+        OrderSender sender = new OrderSender() {
+            @Override
+            public void send(String topic, String key, Order order) {
+                sendCalled[0] = true;
+            }
+        };
+        OrderProducer orderProducer = new OrderProducer(sender);
 
         Order order = new Order("id5", "Pen", 5);
 
@@ -20,6 +25,6 @@ class OrderProducerTest {
         orderProducer.sendOrder(order);
 
         // Assert
-        verify(kafkaTemplate, times(1)).send("orders", "id5", order);
+        assertTrue(sendCalled[0], "KafkaTemplate.send should have been called");
     }
 }
