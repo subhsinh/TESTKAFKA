@@ -1,0 +1,23 @@
+# Maven
+target/
+!.mvn/wrapper/maven-wrapper.jar
+
+# Logs
+*.log
+**/*.log
+
+# Eclipse/IntelliJ/VSCode Project Files
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.settings/
+
+# System Files
+.DS_Store
+*.swp
+
+# Kafka/Temp
+kafka_2.13-3.9.1/logs/
+kafka_2.13-3.9.1/*.log
