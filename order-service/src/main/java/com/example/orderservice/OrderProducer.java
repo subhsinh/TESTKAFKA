@@ -12,8 +12,12 @@ public class OrderProducer {
 
     private static final String TOPIC = "orders";
 
+    private final KafkaTemplate<String, Order> kafkaTemplate;
+
     @Autowired
-    private KafkaTemplate<String, Order> kafkaTemplate;
+    public OrderProducer(KafkaTemplate<String, Order> kafkaTemplate) {
+        this.kafkaTemplate = kafkaTemplate;
+    }
 
     public void sendOrder(Order order) {
         kafkaTemplate.send(TOPIC, order.getId(), order);
