@@ -14,8 +14,18 @@ public class InventoryService {
      * Add a new product to inventory.
      */
     public synchronized void addProduct(String productId, String productName, int stock) {
-        if (inventoryMap.containsKey(productId)) throw new IllegalStateException("Product already exists");
-        inventoryMap.put(productId, new Inventory(productId, productName, stock));
+        if (productId == null || productId.trim().isEmpty())
+            throw new IllegalArgumentException("Product ID must not be empty/null");
+        if (productName == null || productName.trim().isEmpty())
+            throw new IllegalArgumentException("Product Name must not be empty/null");
+        if (stock < 0)
+            throw new IllegalArgumentException("Stock must be zero or positive");
+        // Allow duplicates with additive quantity (as per new test spec)
+        if (inventoryMap.containsKey(productId)) {
+            inventoryMap.get(productId).incrementStock(stock);
+        } else {
+            inventoryMap.put(productId, new Inventory(productId, productName, stock));
+        }
     }
 
     /**
@@ -23,13 +33,17 @@ public class InventoryService {
      * Returns true if successful, false if out of stock.
      */
     public synchronized boolean reserveStock(String productId, int qty) {
+        if (productId == null || productId.trim().isEmpty())
+            throw new IllegalArgumentException("Product ID must not be empty/null");
+        if (qty <= 0)
+            throw new IllegalArgumentException("Quantity must be positive");
         Inventory inv = inventoryMap.get(productId);
         if (inv == null) throw new IllegalArgumentException("Product not found");
         try {
             inv.decrementStock(qty);
             return true;
         } catch (IllegalStateException e) {
-            return false; // oversell, out of stock
+            return false;
         }
     }
 
@@ -37,6 +51,10 @@ public class InventoryService {
      * Cancel reservation—add stock back.
      */
     public synchronized void cancelReservation(String productId, int qty) {
+        if (productId == null || productId.trim().isEmpty())
+            throw new IllegalArgumentException("Product ID must not be empty/null");
+        if (qty <= 0)
+            throw new IllegalArgumentException("Quantity must be positive");
         Inventory inv = inventoryMap.get(productId);
         if (inv == null) throw new IllegalArgumentException("Product not found");
         inv.incrementStock(qty);
@@ -46,6 +64,10 @@ public class InventoryService {
      * Restock product (e.g., from a supplier).
      */
     public synchronized void restock(String productId, int qty) {
+        if (productId == null || productId.trim().isEmpty())
+            throw new IllegalArgumentException("Product ID must not be empty/null");
+        if (qty <= 0)
+            throw new IllegalArgumentException("Quantity must be positive");
         Inventory inv = inventoryMap.get(productId);
         if (inv == null) throw new IllegalArgumentException("Product not found");
         inv.incrementStock(qty);
@@ -55,8 +77,10 @@ public class InventoryService {
      * Return available stock.
      */
     public synchronized int getStock(String productId) {
+        if (productId == null || productId.trim().isEmpty())
+            throw new IllegalArgumentException("Product ID must not be empty/null");
         Inventory inv = inventoryMap.get(productId);
-        if (inv == null) throw new IllegalArgumentException("Product not found");
+        if (inv == null) return 0;
         return inv.getStock();
     }
 

@@ -22,11 +22,7 @@ class InventoryServiceTest {
         assertEquals(100, inventoryService.getStock("SKU1"));
     }
 
-    @Test
-    void addProductThrowsOnDuplicate() {
-        inventoryService.addProduct("SKU1", "Book", 50);
-        assertThrows(IllegalStateException.class, () -> inventoryService.addProduct("SKU1", "Pen", 20));
-    }
+    // Legacy test removed: old "addProductThrowsOnDuplicate" logic replaced with quantity increase for duplicate IDs (see addProductWithDuplicateIdIncreasesQuantity)
 
     @Test
     void addProductAndReserveAndRestock() {
@@ -77,8 +73,8 @@ class InventoryServiceTest {
     }
 
     @Test
-    void getStockThrowsOnMissingProduct() {
-        assertThrows(IllegalArgumentException.class, () -> inventoryService.getStock("BADSKU"));
+    void getStockReturnsZeroForMissingProductCase() {
+        assertEquals(0, inventoryService.getStock("BADSKU"));
     }
 
     // --- Edge cases and advanced tests ---
@@ -128,7 +124,172 @@ class InventoryServiceTest {
         assertEquals(200_001, inventoryService.getStock("SKU10"));
     }
 
-    // Add 15+ validation/edge/corner and stress tests similar to above to hit ~20 base
+    @Test
+    void addProductWithZeroQuantityAllowed() {
+        inventoryService.addProduct("SKUzero", "Eraser", 0);
+        assertEquals(0, inventoryService.getStock("SKUzero"));
+    }
 
-    // ... (continued up to 100 in batches if structure accepted)
+    @Test
+    void addProductNegativeQuantityThrows() {
+        assertThrows(IllegalArgumentException.class, () -> inventoryService.addProduct("SKUn1", "Glue", -10));
+    }
+
+    @Test
+    void addProductWithEmptyIdRaises() {
+        assertThrows(IllegalArgumentException.class, () -> inventoryService.addProduct("", "EmptyID", 10));
+    }
+
+    @Test
+    void addProductWithEmptyNameRaises() {
+        assertThrows(IllegalArgumentException.class, () -> inventoryService.addProduct("SKUe", "", 1));
+    }
+
+    @Test
+    void addProductWithDuplicateIdIncreasesQuantity() {
+        inventoryService.addProduct("SKUx", "Book", 5);
+        inventoryService.addProduct("SKUx", "Book", 3);
+        assertEquals(8, inventoryService.getStock("SKUx"));
+    }
+
+    @Test
+    void addProductWithSpecialCharsAccepted() {
+        inventoryService.addProduct("SPECIAL-!@#", "Special", 4);
+        assertEquals(4, inventoryService.getStock("SPECIAL-!@#"));
+    }
+
+    @Test
+    void addProductCaseSensitivityOnId() {
+        inventoryService.addProduct("abc", "A", 2);
+        inventoryService.addProduct("ABC", "B", 3);
+        assertEquals(2, inventoryService.getStock("abc"));
+        assertEquals(3, inventoryService.getStock("ABC"));
+    }
+
+    @Test
+    void addBulkProductsAndRemove() {
+        for (int i = 0; i < 10; ++i)
+            inventoryService.addProduct("BULK" + i, "Bulk" + i, 50);
+        for (int i = 0; i < 10; ++i)
+            assertTrue(inventoryService.reserveStock("BULK" + i, 50));
+        for (int i = 0; i < 10; ++i)
+            assertEquals(0, inventoryService.getStock("BULK" + i));
+    }
+
+    @Test
+    void getStockReturnsZeroForMissingItem() {
+        assertEquals(0, inventoryService.getStock("DOESNOTEXIST"));
+    }
+
+    @Test
+    void reduceStockCompletelyToZero() {
+        inventoryService.addProduct("OUT", "Toy", 3);
+        assertTrue(inventoryService.reserveStock("OUT", 3));
+        assertEquals(0, inventoryService.getStock("OUT"));
+        assertFalse(inventoryService.reserveStock("OUT", 1));
+    }
+
+    @Test
+    void reduceStockInsufficientlyRaisesFalse() {
+        inventoryService.addProduct("TOOFAR", "Item", 2);
+        assertTrue(inventoryService.reserveStock("TOOFAR", 2));
+        assertFalse(inventoryService.reserveStock("TOOFAR", 1));
+    }
+
+    @Test
+    void reduceStockNegativeValueThrows() {
+        inventoryService.addProduct("NEGATIVE", "Stapler", 5);
+        assertThrows(IllegalArgumentException.class, () -> inventoryService.reserveStock("NEGATIVE", -3));
+    }
+
+    @Test
+    void reduceStockOnNonExistentProductRaises() {
+        assertThrows(IllegalArgumentException.class, () -> inventoryService.reserveStock("NEXIST", 1));
+    }
+
+    @Test
+    void updateStockForNonExistentProductRaises() {
+        assertThrows(IllegalArgumentException.class, () -> inventoryService.restock("XYZ", 6));
+    }
+
+    @Test
+    void reduceStockEmptyIdRaises() {
+        assertThrows(IllegalArgumentException.class, () -> inventoryService.reserveStock("", 2));
+    }
+
+    @Test
+    void updateStockEmptyIdRaises() {
+        assertThrows(IllegalArgumentException.class, () -> inventoryService.restock("", 2));
+    }
+
+    @Test
+    void updateStockNegativeValueThrows() {
+        inventoryService.addProduct("NEGVAL", "Pen", 9);
+        assertThrows(IllegalArgumentException.class, () -> inventoryService.restock("NEGVAL", -9));
+    }
+
+    @Test
+    void addProductWithLargeQuantity() {
+        inventoryService.addProduct("LARGE", "BigStack", 10_000_000);
+        assertEquals(10_000_000, inventoryService.getStock("LARGE"));
+    }
+
+    @Test
+    void addAndReduceStockAcrossManyProducts() {
+        for (int i = 0; i < 100; ++i)
+            inventoryService.addProduct("MIX" + i, "Prod" + i, 100);
+        for (int i = 0; i < 100; i += 2)
+            assertTrue(inventoryService.reserveStock("MIX" + i, 99));
+        for (int i = 0; i < 100; ++i)
+            assertTrue(inventoryService.getStock("MIX" + i) == 1 || inventoryService.getStock("MIX" + i) == 100);
+    }
+
+    @Test
+    void bulkAndCrossProductOperations() {
+        inventoryService.addProduct("ONE", "Pn", 5);
+        inventoryService.addProduct("TWO", "Pn2", 6);
+        assertTrue(inventoryService.reserveStock("ONE", 1));
+        assertTrue(inventoryService.reserveStock("TWO", 5));
+        inventoryService.cancelReservation("ONE", 1);
+        assertEquals(5, inventoryService.getStock("ONE"));
+    }
+
+    @Test
+    void addProductNonStringIdRaises() {
+        assertThrows(IllegalArgumentException.class, () -> inventoryService.addProduct(null, "name", 1));
+    }
+
+    @Test
+    void reduceStockNonStringIdRaises() {
+        assertThrows(IllegalArgumentException.class, () -> inventoryService.reserveStock(null, 1));
+    }
+
+    @Test
+    void addProductNonStringNameRaises() {
+        assertThrows(IllegalArgumentException.class, () -> inventoryService.addProduct("ID101", null, 1));
+    }
+
+    // Add-and-check: special char id, empty name/id, recover all zero stock, edge availability after batch remove
+    @Test
+    void addReduceProductWithSpecialIdChars() {
+        inventoryService.addProduct("!hi@1#", "special", 9);
+        assertTrue(inventoryService.reserveStock("!hi@1#", 9));
+        assertEquals(0, inventoryService.getStock("!hi@1#"));
+    }
+
+    @Test
+    void stockAvailabilityAfterReductions() {
+        inventoryService.addProduct("ITEMZ", "it", 3);
+        assertTrue(inventoryService.reserveStock("ITEMZ", 2));
+        assertEquals(1, inventoryService.getStock("ITEMZ"));
+        assertTrue(inventoryService.reserveStock("ITEMZ", 1));
+        assertEquals(0, inventoryService.getStock("ITEMZ"));
+    }
+
+    @Test
+    void getStockForMixedTypesIsStrictlyIds() {
+        inventoryService.addProduct("ABC", "xyz", 1);
+        assertEquals(1, inventoryService.getStock("ABC"));
+        assertEquals(0, inventoryService.getStock("abc")); // case-sensitive
+    }
 }

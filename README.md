@@ -90,35 +90,98 @@ All critical design, implementation, and test learnings are documented step-by-s
 
 ---
 
-## Lab 1: Foundational Service Setup (Spring Boot + JUnit)
+## Lab 1: Project Bootstrapping, Business Logic & Basic Testing
 
-**Objectives:**
-- Scaffold basic microservice folders: `order-service`, `inventory-service`, `customer-service`
-- Add Maven project structure with Java 17+, proper dependency management
-- Create core POJOs for Order, Inventory, and Customer
-- Establish the first business services (`InventoryService`, `CustomerService`) and unit tests
+**What Was Built:**
+- Created initial repo with 3 Spring Boot microservices:
+    - `order-service` (order placement)
+    - `inventory-service` (inventory update/stock control)
+    - `customer-service` (customer registration/loyalty)
+- Maven multi-module structure, Java 17+, Spring Boot 3.x everywhere
 
-**Learnings:**
-- Maven project setup with Spring Boot 3 and Java 17+ features
-- Using Spring's Dependency Injection for testable, modular Java services
-- Writing POJO-centric unit tests with JUnit 5/Jupiter (classic assertions, edge cases, concurrency, bulk ops)
-- Ensuring IDE/CLI/build system consistency across Java versions by managing toolchains
+**Learnings/Key Concepts:**
+- Microservices architecture for modular/scalable code
+- Independent Spring Boot apps (own configs/ports) for each domain
+- Core POJOs for data transfer: `Order`, `Inventory`, `Customer`
+- Business services:
+    - `InventoryService` for stock ops (decrement/check)
+    - `CustomerService` for registration/loyalty
+- JUnit/Jupiter added for real unit test coverage, running in IDE/CLI with Maven
+- Maven toolchains/plugins for version consistency (Java 17+)
+
+**Architecture/Decisions:**
+- Microservice boundary defined by business responsibility  
+- Pure Java classes, no frameworks (besides Spring/JUnit) in core logic
+- No Docker: Chose direct Spring Boot local run for transparency/learning
+- Full test structure started from day 1
 
 ---
 
-## Lab 2: Kafka Integration, Producer Abstraction, and Mockless Testing
+## Lab 2: Event-Driven Integration with Apache Kafka & Production-Grade Testability
 
-**Objectives:**
-- Integrate order-to-inventory streaming with Kafka (via spring-kafka)
-- Build OrderProducer as a Spring Boot service, using interface-driven injection for testability
-- Write end-to-end business tests for orders, inventory flows, and customers
-- Eliminate fragile dynamic proxies/mocks (Mockito/Byte Buddy) so tests run in Java 21, 24, and the future
+**What Was Built:**
+- Kafka producer in `order-service` (publishes to topic "orders")
+- Kafka consumer in `inventory-service` (Consumes from "orders" topic)
+- `spring-kafka` integration configured with JSON serialization
+- Exposed REST endpoint (`POST /orders`) triggers async Kafka publishing
 
-**Learnings:**
-- Abstraction via the `OrderSender` interface for pure, proxy-free business testing
-- Advanced error handling and edge case coverage (stock, duplicate, not found, concurrency)
-- Using test doubles instead of mocks to ensure compatibility with latest/future JDKs
-- How to configure Maven, JUnit, and Spring Boot for testing microservices robustly
+**Learnings/Key Concepts:**
+- Kafka event-driven architecture: decouples services, supports async scale-out
+- Kafka basics: Broker, Topic, Producer, Consumer, Group ID, JSON message flow
+- Producer: Using `KafkaTemplate<String, Order>`, JSON config, sends to "orders"
+- Consumer: `@KafkaListener`, receives and processes orders
+- REST-to-Kafka-to-Consumer E2E cycle (see diagram below)
+- Local Kafka/Zookeeper setup, plus each service as an independent process
+- Manual service/E2E test via API: POST order → event → consumed/logged
+
+**Architecture:**
+![System Architecture Diagram](images/ims-architecture.png)
+
+*IMS high-level architecture (upload as images/ims-architecture.png)*
+
+**Integration Sequence:**
+```mermaid
+sequenceDiagram
+  participant Client
+  participant OrderService
+  participant Kafka
+  participant InventoryService
+
+  Client->>OrderService: POST /orders (order JSON)
+  OrderService->>Kafka: Publish order to "orders" topic
+  Kafka-->>InventoryService: Deliver order event (consume)
+  InventoryService->>InventoryService: Process/log order
+```
+*Upload images/order-sequence.png for visual (see README instructions)*
+
+**Decisions:**
+- Docker skipped for early labs: makes infra/test ops fully visible & debuggable; external Kafka used standalone.
+- Each service easy to run, no container or YAML needed—great for single-dev and learning setups.
+- Business logic kept in plain Java/service methods for easy test coverage.
+
+**Test Evolution:**
+- Basic consumer/producer verified with real Kafka, not mocks (end-to-end system confirmed).
+- Tests exercise all flows via unit/service-level coverage (JUnit 5).
+
+---
+
+## Lab 3: Clean Testability & Framework-Independent Unit Tests (Java 21+/24+ Ready)
+
+**What Was Built:**
+- Refactored order-producer to NOT use direct `KafkaTemplate` dependency (cannot easily/robustly mock in new Java)
+- Defined and injected a one-method `OrderSender` interface
+- Production code wires Spring `OrderSender` bean via KafkaTemplate, test code uses a self-contained stub
+- All service logic and APIs covered with meaningful, reliable unit tests
+
+**Learnings/Key Concepts:**
+- Problems with using Mockito/Byte Buddy for final/system classes in latest Java
+- How to refactor for dependency injection that enables test doubles instead of mocks
+- Test coverage is deterministic, robust, and not dependent on framework proxying
+- Achievable 100% path coverage on custom business logic
+
+**Decisions/Benefits:**
+- No fragile Java proxy, no complex mock config: simple Java code for robust, future-proof tests
+- All code ready for integration/E2E/CI workflows
 
 ---
 
