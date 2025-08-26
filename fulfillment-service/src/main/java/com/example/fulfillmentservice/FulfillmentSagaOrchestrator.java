@@ -1,15 +1,20 @@
 package com.example.fulfillmentservice;
 
-import com.example.fulfillmentservice.model.*;
-import org.springframework.kafka.annotation.KafkaListener;
-import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.stereotype.Component;
-import org.springframework.beans.factory.annotation.Value;
-
 import java.time.Instant;
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.stereotype.Component;
+
+import com.example.fulfillmentservice.model.FulfillmentEvent;
+import com.example.fulfillmentservice.model.FulfillmentStatus;
+import com.example.fulfillmentservice.model.OrderEvent;
 
 /**
  * Core business orchestrator for distributed, event-sourced order fulfillment with saga/compensation logic.
@@ -19,7 +24,8 @@ public class FulfillmentSagaOrchestrator {
 
     private final EventSender eventSender;
     private final FulfillmentInventoryGateway inventoryGateway;
-    private final Map<String, List<FulfillmentEvent>> eventStore = new ConcurrentHashMap<>(); // orderId -> events
+    // eventStore backed by disk for idempotence across restarts
+    private final Map<String, List<FulfillmentEvent>> eventStore = EventStoreDiskPersistence.load();
 
     @Value("${spring.kafka.template.default-topic:fulfillment-events}")
     private String fulfillmentTopic;
@@ -33,32 +39,38 @@ public class FulfillmentSagaOrchestrator {
         this.inventoryGateway = inventoryGateway;
     }
 
-    @KafkaListener(topics = "orders", groupId = "fulfillment-service-group")
-    public void onOrderPlaced(String orderJson) {
-        System.out.println("[DEBUG] onOrderPlaced invoked with: " + orderJson);
-        // Parse JSON to OrderEvent (later: use ObjectMapper bean)
-        OrderEvent order = KafkaSerdeUtil.fromJson(orderJson, OrderEvent.class);
-        if (order == null || order.getOrderId() == null) {
-            System.out.println("[DEBUG] Invalid or null order parsed, aborting.");
-            return;
-        }
-
-        // Begin fulfillment process (saga)
-        FulfillmentEvent evt = new FulfillmentEvent(
-            UUID.randomUUID().toString(),
-            order.getOrderId(),
-            FulfillmentStatus.NEW,
-            "OrderPlaced",
-            orderJson,
-            Instant.now(),
-            order.getOrderId(), // correlationId is orderId for now
-            null
-        );
-        appendAndPublishEvent(evt);
-
-        // Move to allocation
-        allocateInventory(order);
+@KafkaListener(topics = "orders", groupId = "fulfillment-service-group")
+public void onOrderPlaced(String orderJson) {
+    System.out.println("[DEBUG] onOrderPlaced invoked with: " + orderJson);
+    // Parse JSON to OrderEvent (later: use ObjectMapper bean)
+    OrderEvent order = KafkaSerdeUtil.fromJson(orderJson, OrderEvent.class);
+    if (order == null || order.getOrderId() == null) {
+        System.out.println("[DEBUG] Invalid or null order parsed, aborting.");
+        return;
     }
+
+    // Block duplicate orderId unless only the very first OrderPlaced event is processed ever for an orderId
+    if (eventStore.containsKey(order.getOrderId())) {
+        System.out.println("[DEBUG] Duplicate orderId detected (" + order.getOrderId() + "), ignoring new placement.");
+        return;
+    }
+
+    // Begin fulfillment process (saga)
+    FulfillmentEvent evt = new FulfillmentEvent(
+        UUID.randomUUID().toString(),
+        order.getOrderId(),
+        FulfillmentStatus.NEW,
+        "OrderPlaced",
+        orderJson,
+        Instant.now(),
+        order.getOrderId(), // correlationId is orderId for now
+        null
+    );
+    appendAndPublishEvent(evt);
+
+    // Move to allocation
+    allocateInventory(order);
+}
 
     private void allocateInventory(OrderEvent order) {
         System.out.println("[DEBUG] allocateInventory for: " + order.getOrderId());
@@ -134,8 +146,9 @@ public class FulfillmentSagaOrchestrator {
     }
 
     private synchronized void appendAndPublishEvent(FulfillmentEvent evt) {
-        // Store to in-memory log
+        // Store to disk-backed log
         eventStore.computeIfAbsent(evt.getOrderId(), k -> new ArrayList<>()).add(evt);
+        EventStoreDiskPersistence.save(eventStore);
         currentStatus.put(evt.getOrderId(), evt.getStatus());
         System.out.println("[DEBUG] Event appended: " + evt.getType() + " for " + evt.getOrderId() +
                 " | EventStore size=" + eventStore.get(evt.getOrderId()).size() +

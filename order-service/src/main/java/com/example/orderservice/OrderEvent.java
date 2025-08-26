@@ -1,20 +1,13 @@
-package com.example.fulfillmentservice.model;
+package com.example.orderservice;
 
 import java.time.Instant;
-import java.util.Objects;
 
-/**
- * Event streamed from orders topic (placed by order-service)
- */
 public class OrderEvent {
     private String orderId;
     private String product;
     private int quantity;
     private String customerId;
     private Instant created;
-    // Optionally: payment, metadata
-
-    public OrderEvent() {}
 
     public OrderEvent(String orderId, String product, int quantity, String customerId, Instant created) {
         this.orderId = orderId;
@@ -26,29 +19,12 @@ public class OrderEvent {
 
     public String getOrderId() { return orderId; }
     public void setOrderId(String orderId) { this.orderId = orderId; }
-public String getProduct() { return product; }
-public void setProduct(String product) { this.product = product; }
+    public String getProduct() { return product; }
+    public void setProduct(String product) { this.product = product; }
     public int getQuantity() { return quantity; }
     public void setQuantity(int quantity) { this.quantity = quantity; }
     public String getCustomerId() { return customerId; }
     public void setCustomerId(String customerId) { this.customerId = customerId; }
     public Instant getCreated() { return created; }
     public void setCreated(Instant created) { this.created = created; }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (!(o instanceof OrderEvent)) return false;
-        OrderEvent that = (OrderEvent) o;
-        return quantity == that.quantity &&
-                Objects.equals(orderId, that.orderId) &&
-                Objects.equals(product, that.product) &&
-                Objects.equals(customerId, that.customerId) &&
-                Objects.equals(created, that.created);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(orderId, product, quantity, customerId, created);
-    }
 }

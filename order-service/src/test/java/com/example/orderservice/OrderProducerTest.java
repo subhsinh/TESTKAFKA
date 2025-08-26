@@ -1,9 +1,7 @@
 package com.example.orderservice;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
-import org.springframework.kafka.core.KafkaTemplate;
-
-import static org.junit.jupiter.api.Assertions.*;
 
 class OrderProducerTest {
 
@@ -13,7 +11,7 @@ class OrderProducerTest {
         final boolean[] sendCalled = {false};
         OrderSender sender = new OrderSender() {
             @Override
-            public void send(String topic, String key, Order order) {
+            public void send(String topic, String key, OrderEvent orderEvent) {
                 sendCalled[0] = true;
             }
         };
